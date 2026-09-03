@@ -16,7 +16,7 @@ CFLAGS = -Wall -g -O2 -I. -Iheroes -Iheroes/feixiao -Iheroes/zhaoyun -Iheroes/gi
 # ====== 链接参数 ======
 LDFLAGS = -L$(ONNX_DIR)/lib \
           -lonnxruntime -lonnxruntime_providers_shared \
-          -lmingw32 -lSDL2main -lSDL2 -lSDL2_ttf -lSDL2_image -lm
+          -lmingw32 -lSDL2main -lSDL2 -lSDL2_ttf -lSDL2_image -lSDL2_mixer -lm
 
 # ====== 源文件 ======
 SRCS = main.c \
@@ -27,6 +27,7 @@ SRCS = main.c \
        input.c \
        state_encoder.c \
        nn_bridge.c \
+       audio.c \
        heroes/hero.c \
        heroes/feixiao/feixiao.c \
        heroes/zhaoyun/zhaoyun.c \
