@@ -4,6 +4,7 @@
 #include "game.h"
 #include "render.h"
 #include "input.h"
+#include "audio.h"
 
 int main(int argc, char* argv[])
 {
@@ -27,6 +28,10 @@ int main(int argc, char* argv[])
         game_destroy(&game);
         return 1;
     }
+
+    /* 音频文件 */
+    audio_init();
+    play_bgm0();
 
     /* 初始化输入 */
     static InputState input;
@@ -65,8 +70,13 @@ int main(int argc, char* argv[])
 
     /* 清理：原来bug：input_init 改成 input_destroy */
     input_destroy(&input);
+    /*关闭所有音频*/
+    audio_close();
+
     render_destroy(&render);
     game_destroy(&game);
+    /*推出sdl，不要也行*/
+    SDL_Quit();
 
     return 0;
 }
