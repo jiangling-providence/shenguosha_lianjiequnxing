@@ -2151,6 +2151,232 @@ void render_game(RenderContext* ctx, GameState* game)
                            ctx->font_normal, ctx->color_yellow);
     }
 
+    /* ---- 镜流古镜照神：选项1/选项2/取消 ---- */
+    if(game->resp_state == RESPONSE_NEED_JINGLIU_GUJING)
+    {
+        Player* me = &game->players[0];
+        int btn_w = 240;
+        int btn_h = 100;
+        int gap = 30;
+        int total_w = btn_w * 2 + gap;
+        int start_x = WINDOW_WIDTH / 2 - total_w / 2;
+        int start_y = WINDOW_HEIGHT / 2 - btn_h / 2 - 30;
+
+        const char* opt_names[2] = {
+            "选项1：失去3标记",
+            "选项2：失去5标记"
+        };
+        const char* opt_desc[2] = {
+            "摸3张+获得所有人一张牌",
+            "摸5张+对全体出杀"
+        };
+        SDL_Color opt_colors[2] = {
+            {50, 100, 200, 255},
+            {200, 50, 50, 255}
+        };
+
+        for(int i = 0; i < 2; i++)
+        {
+            int bx = start_x + i * (btn_w + gap);
+            int by = start_y;
+            int available = jingliu_gujing_option_available(game, 0, i + 1);
+
+            if(available){
+                SDL_SetRenderDrawColor(ren, opt_colors[i].r, opt_colors[i].g, opt_colors[i].b, 220);
+            }else{
+                SDL_SetRenderDrawColor(ren, 80, 80, 80, 200);
+            }
+            SDL_Rect btn = {bx, by, btn_w, btn_h};
+            SDL_RenderFillRect(ren, &btn);
+
+            if(available)
+                SDL_SetRenderDrawColor(ren, 255, 255, 255, 255);
+            else
+                SDL_SetRenderDrawColor(ren, 120, 120, 120, 255);
+            SDL_RenderDrawRect(ren, &btn);
+
+            SDL_Color text_color = available ? ctx->color_white : (SDL_Color){150, 150, 150, 255};
+            render_text_center(ctx, opt_names[i], bx + btn_w / 2, by + 20,
+                               ctx->font_normal, text_color);
+            render_text_center(ctx, opt_desc[i], bx + btn_w / 2, by + 55,
+                               ctx->font_small, text_color);
+            char mark_str[32];
+            snprintf(mark_str, sizeof(mark_str), "当前标记：%d", me->jingliu.hong_marks);
+            render_text_center(ctx, mark_str, bx + btn_w / 2, by + 80,
+                               ctx->font_small, text_color);
+
+            if(available){
+                render_hover_glow(ctx, bx, by, btn_w, btn_h,
+                                  game->mouse_x, game->mouse_y);
+            }
+        }
+
+        /* 取消按钮 */
+        int cancel_w = 120;
+        int cancel_h = 50;
+        int cancel_x = WINDOW_WIDTH / 2 - cancel_w / 2;
+        int cancel_y = start_y + btn_h + 30;
+        SDL_SetRenderDrawColor(ren, 100, 100, 100, 220);
+        SDL_Rect cancel_btn = {cancel_x, cancel_y, cancel_w, cancel_h};
+        SDL_RenderFillRect(ren, &cancel_btn);
+        SDL_SetRenderDrawColor(ren, 255, 255, 255, 255);
+        SDL_RenderDrawRect(ren, &cancel_btn);
+        render_text_center(ctx, "取消", cancel_x + cancel_w / 2, cancel_y + 15,
+                           ctx->font_normal, ctx->color_white);
+        render_hover_glow(ctx, cancel_x, cancel_y, cancel_w, cancel_h,
+                          game->mouse_x, game->mouse_y);
+
+        /* 标题 */
+        render_text_center(ctx, "【古镜照神】请选择一项",
+                           WINDOW_WIDTH / 2, start_y - 35,
+                           ctx->font_normal, ctx->color_yellow);
+    }
+
+    /* ---- 化形①：2*2花色选择界面 ---- */
+    if(game->resp_state == RESPONSE_NEED_HUAXING_SUIT)
+    {
+        Player* me = &game->players[0];
+        int btn_w = 180;
+        int btn_h = 100;
+        int gap = 25;
+        int total_w = btn_w * 2 + gap;
+        int start_x = WINDOW_WIDTH / 2 - total_w / 2;
+        int start_y = WINDOW_HEIGHT / 2 - btn_h - gap / 2;
+
+        const char* suit_names[4] = {"黑桃", "红桃", "梅花", "方块"};
+        SDL_Color suit_colors[4] = {
+            {50, 50, 50, 255},    /* 黑桃：黑 */
+            {200, 50, 50, 255},   /* 红桃：红 */
+            {30, 100, 30, 255},   /* 梅花：深绿 */
+            {200, 100, 20, 255}   /* 方块：橙 */
+        };
+        char suit_symbols[4] = {'S', 'H', 'C', 'D'};
+
+        for(int i = 0; i < 4; i++)
+        {
+            int col = i % 2;
+            int row = i / 2;
+            int bx = start_x + col * (btn_w + gap);
+            int by = start_y + row * (btn_h + gap);
+
+            /* 检查该花色是否可用 */
+            int available = 0;
+            if(me->hero_id == HERO_YUDIE && me->yudie.chengdie)
+            {
+                /* 有该花色手牌 */
+                for(int j = 0; j < me->hand_count; j++)
+                {
+                    if(me->hand[j] && me->hand[j]->suit == i) { available = 1; break; }
+                }
+                /* 已使用的花色不可选 */
+                if(me->yudie.huaxing_used_suits & (1 << i)) available = 0;
+            }
+
+            if(available)
+                SDL_SetRenderDrawColor(ren, suit_colors[i].r, suit_colors[i].g, suit_colors[i].b, 220);
+            else
+                SDL_SetRenderDrawColor(ren, 80, 80, 80, 180);
+
+            SDL_Rect btn = {bx, by, btn_w, btn_h};
+            SDL_RenderFillRect(ren, &btn);
+            SDL_SetRenderDrawColor(ren, 255, 255, 255, available ? 255 : 100);
+            SDL_RenderDrawRect(ren, &btn);
+
+            /* 花色符号 */
+            char sym[2] = {suit_symbols[i], '\0'};
+            render_text_center(ctx, sym, bx + btn_w/2, by + 25,
+                               ctx->font_large, available ? ctx->color_white : (SDL_Color){150,150,150,255});
+            /* 花色名称 */
+            render_text_center(ctx, suit_names[i], bx + btn_w/2, by + 65,
+                               ctx->font_normal, available ? ctx->color_white : (SDL_Color){150,150,150,255});
+
+            if(available)
+                render_hover_glow(ctx, bx, by, btn_w, btn_h, game->mouse_x, game->mouse_y);
+        }
+
+        /* 标题 */
+        render_text_center(ctx, "【化形】选择花色（每花色限一次）",
+                           WINDOW_WIDTH / 2, start_y - 40,
+                           ctx->font_normal, ctx->color_yellow);
+
+        /* 结束按钮 */
+        int end_bx = WINDOW_WIDTH / 2 - 60;
+        int end_by = start_y + 2 * btn_h + gap + 20;
+        SDL_SetRenderDrawColor(ren, 100, 100, 100, 220);
+        SDL_Rect end_btn = {end_bx, end_by, 120, 40};
+        SDL_RenderFillRect(ren, &end_btn);
+        SDL_SetRenderDrawColor(ren, 255, 255, 255, 255);
+        SDL_RenderDrawRect(ren, &end_btn);
+        render_text_center(ctx, "结束化形", end_bx + 60, end_by + 10,
+                           ctx->font_normal, ctx->color_white);
+    }
+
+    /* ---- 化形①：选择手牌界面 ---- */
+    if(game->resp_state == RESPONSE_NEED_HUAXING_HAND)
+    {
+        render_text_center(ctx, "【化形】请选择一张该花色的手牌（点击取消按钮返回）",
+                           WINDOW_WIDTH / 2, WINDOW_HEIGHT / 2 - 100,
+                           ctx->font_normal, ctx->color_yellow);
+    }
+
+    /* ---- 化形①：选择锦囊牌名界面 ---- */
+    if(game->resp_state == RESPONSE_NEED_HUAXING_TRICK)
+    {
+        Player* me = &game->players[0];
+        /* 获取当前花色可用的锦囊牌名 */
+        char tricks[10][32];
+        int trick_count = 0;
+        /* 简化：从记录中获取 */
+        for(int i = 0; i < me->yudie.huaxing_record_count && trick_count < 10; i++)
+        {
+            int dup = 0;
+            for(int j = 0; j < trick_count; j++)
+                if(strcmp(tricks[j], me->yudie.huaxing_record_names[i]) == 0) { dup = 1; break; }
+            for(int j = 0; j < me->yudie.huaxing_played_name_count && !dup; j++)
+                if(strcmp(me->yudie.huaxing_played_names[j], me->yudie.huaxing_record_names[i]) == 0) { dup = 1; break; }
+            if(!dup) { strncpy(tricks[trick_count], me->yudie.huaxing_record_names[i], 31); tricks[trick_count][31]='\0'; trick_count++; }
+        }
+
+        int cols = 4;
+        int btn_w = 140;
+        int btn_h = 50;
+        int gap_x = 12;
+        int gap_y = 12;
+        int rows = (trick_count + cols - 1) / cols;
+        int total_w = cols * btn_w + (cols - 1) * gap_x;
+        int start_x = WINDOW_WIDTH / 2 - total_w / 2;
+        int start_y = WINDOW_HEIGHT / 2 - (rows * btn_h + (rows-1) * gap_y) / 2;
+
+        for(int i = 0; i < trick_count; i++)
+        {
+            int col = i % cols;
+            int row = i / cols;
+            int bx = start_x + col * (btn_w + gap_x);
+            int by = start_y + row * (btn_h + gap_y);
+
+            SDL_SetRenderDrawColor(ren, 60, 100, 160, 220);
+            SDL_Rect btn = {bx, by, btn_w, btn_h};
+            SDL_RenderFillRect(ren, &btn);
+            SDL_SetRenderDrawColor(ren, 255, 255, 255, 255);
+            SDL_RenderDrawRect(ren, &btn);
+            render_text_center(ctx, tricks[i], bx + btn_w/2, by + 15,
+                               ctx->font_normal, ctx->color_white);
+            render_hover_glow(ctx, bx, by, btn_w, btn_h, game->mouse_x, game->mouse_y);
+        }
+
+        render_text_center(ctx, "【化形】选择要转化的锦囊牌名",
+                           WINDOW_WIDTH / 2, start_y - 35,
+                           ctx->font_normal, ctx->color_yellow);
+    }
+
+    /* ---- 化形②：选择目标界面 ---- */
+    if(game->resp_state == RESPONSE_NEED_HUAXING_TARGET)
+    {
+        render_text_center(ctx, "【化形②】请点击指定一名角色（点击取消按钮跳过）",
+                           WINDOW_WIDTH / 2, WINDOW_HEIGHT / 2 - 120,
+                           ctx->font_normal, ctx->color_yellow);
+    }
+
     /* ---- 圣骑士破灭护盾：牌名选择界面 ---- */
     if(game->resp_state == RESPONSE_NEED_PALADIN_POMIE_CARD)
     {

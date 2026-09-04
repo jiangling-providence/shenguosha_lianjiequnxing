@@ -9,6 +9,7 @@
 #include "heroes/linyuxia/linyuxia.h"
 #include "heroes/zhaoyun/zhaoyun.h"
 #include "heroes/jingliu/jingliu.h"
+#include "heroes/yudie/yudie.h"
 
 
 /* ================================================================
@@ -519,6 +520,117 @@ int input_hit_paladin_option(int mx, int my)
     return 0;
 }
 
+/* ================================================================
+ * 镜流古镜照神：选项按钮点击检测
+ * 返回1=选项1, 2=选项2, 3=取消, 0=没点中
+ * ================================================================ */
+int input_hit_jingliu_gujing_option(int mx, int my)
+{
+    int btn_w = 240;
+    int btn_h = 100;
+    int gap = 30;
+    int total_w = btn_w * 2 + gap;
+    int start_x = WINDOW_WIDTH / 2 - total_w / 2;
+    int start_y = WINDOW_HEIGHT / 2 - btn_h / 2 - 30;
+
+    /* 选项1 */
+    if(mx >= start_x && mx <= start_x + btn_w &&
+       my >= start_y && my <= start_y + btn_h)
+        return 1;
+    /* 选项2 */
+    if(mx >= start_x + btn_w + gap && mx <= start_x + btn_w * 2 + gap &&
+       my >= start_y && my <= start_y + btn_h)
+        return 2;
+    /* 取消按钮 */
+    int cancel_w = 120;
+    int cancel_h = 50;
+    int cancel_x = WINDOW_WIDTH / 2 - cancel_w / 2;
+    int cancel_y = start_y + btn_h + 30;
+    if(mx >= cancel_x && mx <= cancel_x + cancel_w &&
+       my >= cancel_y && my <= cancel_y + cancel_h)
+        return 3;
+    return 0;
+}
+
+/* ================================================================
+ * 化形①：2*2花色按钮点击检测
+ * 返回花色0-3，-1表示没点中，-2表示点了结束按钮
+ * ================================================================ */
+int input_hit_huaxing_suit(int mx, int my)
+{
+    int btn_w = 180;
+    int btn_h = 100;
+    int gap = 25;
+    int total_w = btn_w * 2 + gap;
+    int start_x = WINDOW_WIDTH / 2 - total_w / 2;
+    int start_y = WINDOW_HEIGHT / 2 - btn_h - gap / 2;
+
+    for(int i = 0; i < 4; i++)
+    {
+        int col = i % 2;
+        int row = i / 2;
+        int bx = start_x + col * (btn_w + gap);
+        int by = start_y + row * (btn_h + gap);
+        if(mx >= bx && mx <= bx + btn_w &&
+           my >= by && my <= by + btn_h)
+            return i;
+    }
+
+    /* 结束按钮 */
+    int end_bx = WINDOW_WIDTH / 2 - 60;
+    int end_by = start_y + 2 * btn_h + gap + 20;
+    if(mx >= end_bx && mx <= end_bx + 120 &&
+       my >= end_by && my <= end_by + 40)
+        return -2;
+
+    return -1;
+}
+
+/* ================================================================
+ * 化形①：锦囊牌名按钮点击检测
+ * 返回锦囊索引，-1表示没点中
+ * ================================================================ */
+int input_hit_huaxing_trick(GameState* game, int mx, int my)
+{
+    if(!game) return -1;
+    Player* me = &game->players[0];
+
+    /* 获取可用锦囊数量 */
+    char tricks[10][32];
+    int trick_count = 0;
+    for(int i = 0; i < me->yudie.huaxing_record_count && trick_count < 10; i++)
+    {
+        int dup = 0;
+        for(int j = 0; j < trick_count; j++)
+            if(strcmp(tricks[j], me->yudie.huaxing_record_names[i]) == 0) { dup = 1; break; }
+        for(int j = 0; j < me->yudie.huaxing_played_name_count && !dup; j++)
+            if(strcmp(me->yudie.huaxing_played_names[j], me->yudie.huaxing_record_names[i]) == 0) { dup = 1; break; }
+        if(!dup) { strncpy(tricks[trick_count], me->yudie.huaxing_record_names[i], 31); tricks[trick_count][31]='\0'; trick_count++; }
+    }
+
+    int cols = 4;
+    int btn_w = 140;
+    int btn_h = 50;
+    int gap_x = 12;
+    int gap_y = 12;
+    int rows = (trick_count + cols - 1) / cols;
+    int total_w = cols * btn_w + (cols - 1) * gap_x;
+    int start_x = WINDOW_WIDTH / 2 - total_w / 2;
+    int start_y = WINDOW_HEIGHT / 2 - (rows * btn_h + (rows-1) * gap_y) / 2;
+
+    for(int i = 0; i < trick_count; i++)
+    {
+        int col = i % cols;
+        int row = i / cols;
+        int bx = start_x + col * (btn_w + gap_x);
+        int by = start_y + row * (btn_h + gap_y);
+        if(mx >= bx && mx <= bx + btn_w &&
+           my >= by && my <= by + btn_h)
+            return i;
+    }
+    return -1;
+}
+
 /* 检测玩家手牌中是否有当前响应需要的牌，返回下标，-1表示没有 */
 int input_find_response_card(GameState* game)
 {
@@ -991,6 +1103,18 @@ void input_handle_event(InputState* state, GameState* game,
                 return;  /* 点空白处不做任何事，必须选一个 */
             }
 
+            /* 镜流古镜照神：选择选项1/选项2/取消 */
+            if(game->resp_state == RESPONSE_NEED_JINGLIU_GUJING)
+            {
+                int opt = input_hit_jingliu_gujing_option(e->button.x, e->button.y);
+                if(opt == 1 || opt == 2){
+                    jingliu_gujing_choose_option(game, 0, opt);
+                }else if(opt == 3){
+                    jingliu_gujing_cancel(game);
+                }
+                return;
+            }
+
             /* 圣骑士破灭护盾：选择牌名 */
             if(game->resp_state == RESPONSE_NEED_PALADIN_POMIE_CARD)
             {
@@ -1017,6 +1141,90 @@ void input_handle_event(InputState* state, GameState* game,
                 }
 
                 return;  /* 点空白处不做任何事 */
+            }
+
+            /* 化形①：选择花色 */
+            if(game->resp_state == RESPONSE_NEED_HUAXING_SUIT)
+            {
+                int suit = input_hit_huaxing_suit(e->button.x, e->button.y);
+                if(suit >= 0 && suit < 4)
+                {
+                    Player* me = &game->players[0];
+                    /* 检查是否可用 */
+                    int available = 0;
+                    for(int j = 0; j < me->hand_count; j++)
+                    {
+                        if(me->hand[j] && me->hand[j]->suit == suit) { available = 1; break; }
+                    }
+                    if(available && !(me->yudie.huaxing_used_suits & (1 << suit)))
+                    {
+                        game_log(game, "【化形】选择花色%d", suit);
+                        yudie_huaxing_pick_suit(game, 0, suit);
+                    }
+                    else
+                    {
+                        game_log(game, "【化形】该花色不可用");
+                    }
+                }
+                else if(suit == -2)  /* 结束按钮 */
+                {
+                    game_log(game, "【化形】结束化形①");
+                    yudie_huaxing_end(game, 0);
+                }
+                return;
+            }
+
+            /* 化形①：选择手牌 */
+            if(game->resp_state == RESPONSE_NEED_HUAXING_HAND)
+            {
+                int hand_idx = input_hit_hand_card(game, ctx, e->button.x, e->button.y);
+                if(hand_idx >= 0)
+                {
+                    yudie_huaxing_pick_hand(game, 0, hand_idx);
+                }
+                /* 取消按钮 */
+                if(input_hit_cancel_button(e->button.x, e->button.y))
+                {
+                    game->resp_state = RESPONSE_NEED_HUAXING_SUIT;
+                    game_log(game, "【化形】返回到选花色");
+                }
+                return;
+            }
+
+            /* 化形①：选择锦囊牌名 */
+            if(game->resp_state == RESPONSE_NEED_HUAXING_TRICK)
+            {
+                int trick_idx = input_hit_huaxing_trick(game, e->button.x, e->button.y);
+                if(trick_idx >= 0)
+                {
+                    game_log(game, "【化形】选择锦囊%d", trick_idx);
+                    yudie_huaxing_pick_trick(game, 0, trick_idx);
+                }
+                /* 取消按钮 */
+                if(input_hit_cancel_button(e->button.x, e->button.y))
+                {
+                    game->resp_state = RESPONSE_NEED_HUAXING_HAND;
+                    game_log(game, "【化形】返回到选手牌");
+                }
+                return;
+            }
+
+            /* 化形②：选择目标 */
+            if(game->resp_state == RESPONSE_NEED_HUAXING_TARGET)
+            {
+                int target = input_hit_player(game, e->button.x, e->button.y);
+                if(target >= 0 && game->players[target].alive)
+                {
+                    game_log(game, "【化形②】指定目标%d", target);
+                    yudie_huaxing_set_target(game, 0, target);
+                }
+                /* 取消按钮 */
+                if(input_hit_cancel_button(e->button.x, e->button.y))
+                {
+                    game->resp_state = RESPONSE_NONE;
+                    game_log(game, "【化形②】取消指定目标");
+                }
+                return;
             }
 
             /* 主动技能点击：自己回合无响应时，或自己需要响应基本牌/无懈可击时（龙胆、破灭护盾等） */

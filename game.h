@@ -69,6 +69,7 @@ typedef enum{
     RESPONSE_NEED_DENGXIAN_CONVERT = 35, /* 登仙牌型转换选择：当原牌/当桃/当桃园 */
     RESPONSE_NEED_YUZHAN_TARGET = 36, /* 玉盏目标调整：增加/减少/不调整 */
     RESPONSE_NEED_LIUYING_BENGFA = 37, /* 流萤迸发：选择火属性/雷属性 */
+    RESPONSE_NEED_JINGLIU_GUJING = 38, /* 镜流古镜照神：选择选项1/选项2/取消 */
 }RespState;
 
 /* ===== 无懈可击栈帧：用于多层反无懈 ===== */
@@ -580,5 +581,8 @@ void game_bagua_confirm(GameState* g);  /* 确认：进行判定 */
 void game_bagua_cancel(GameState* g);   /* 取消：跳过八卦阵，继续结算杀 */
 void game_bagua_clear(GameState* g);    /* 清除八卦阵状态 */
 
+
+/* 训练环境标志：1=训练环境（群体技能自动响应），0=游戏本体 */
+extern int g_training_mode;
 
 #endif /* GAME_H */

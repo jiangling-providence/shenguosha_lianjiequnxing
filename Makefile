@@ -6,8 +6,8 @@
 # 编译器
 CC = gcc
 
-# ONNX Runtime路径
-ONNX_DIR = onnxruntime-win-x64-1.19.2
+# ONNX Runtime路径（DirectML GPU版本）
+ONNX_DIR = onnxruntime-directml
 
 # ====== 编译参数 ======
 CFLAGS = -Wall -g -O2 -I. -Iheroes -Iheroes/feixiao -Iheroes/zhaoyun -Iheroes/gilgamesh -Iheroes/linyuxia -Iheroes/paladin -Iheroes/yudie -Iheroes/liuying -Iheroes/jingliu \
@@ -15,7 +15,7 @@ CFLAGS = -Wall -g -O2 -I. -Iheroes -Iheroes/feixiao -Iheroes/zhaoyun -Iheroes/gi
 
 # ====== 链接参数 ======
 LDFLAGS = -L$(ONNX_DIR)/lib \
-          -lonnxruntime -lonnxruntime_providers_shared \
+          -lonnxruntime \
           -lmingw32 -lSDL2main -lSDL2 -lSDL2_ttf -lSDL2_image -lSDL2_mixer -lm
 
 # ====== 源文件 ======
@@ -27,6 +27,8 @@ SRCS = main.c \
        input.c \
        state_encoder.c \
        nn_bridge.c \
+       serialize.c \
+       mcts.c \
        audio.c \
        heroes/hero.c \
        heroes/feixiao/feixiao.c \

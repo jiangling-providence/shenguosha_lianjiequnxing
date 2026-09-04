@@ -5,6 +5,7 @@
 #include "game.h"
 #include "player.h"
 #include "card.h"
+#include "audio.h"
 
 void jingliu_register(Hero* h)
 {

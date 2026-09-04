@@ -98,6 +98,9 @@ typedef struct Player {
         int  huaxing_record_count;
         /* 化形②：每角色每回合使用次数 */
         int huaxing_response_used[2];     /* 每个角色本回合化形②使用次数 */
+        /* 化形②：记录目标角色本回合使用过的牌 */
+        int  huaxing_target_used_suits;   /* 目标角色本回合使用过的花色（bitmask） */
+        char huaxing_target_used_names[4][32]; /* 各花色最近使用的牌名 */
     } yudie;
 
     /* ===== 流萤专用数据 ===== */

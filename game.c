@@ -1,4 +1,4 @@
-#include <stdio.h>
+﻿#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <stdarg.h>
@@ -16,6 +16,7 @@
 #include "heroes/jingliu/jingliu.h"
 #include "nn_bridge.h"
 #include "state_encoder.h"
+#include "mcts.h"
 
 /* 神经网络AI开关 */
 static int g_nn_ai_enabled = 0;
@@ -554,18 +555,35 @@ void game_draw_cards(GameState* g, int player_idx, int n)
 {
     if (!g || player_idx < 0 || player_idx >= g->player_count) return;
     Player* p = &g->players[player_idx];
+    int drawn = 0;
     for (int i = 0; i < n; i++) {
         Card* c = deck_draw(&g->deck);
         if (!c) {
+            /* 牌堆空了，尝试重洗弃牌堆 */
             if (g->discard.count > 0) {
-                game_log(g, "牌堆已空！");
-                break;
+                game_log(g, "牌堆已空，重洗弃牌堆（%d张）", g->discard.count);
+                /* 把弃牌堆的牌移到牌堆 */
+                for (int j = 0; j < g->discard.count; j++) {
+                    if (g->deck.top > 0) {
+                        g->deck.top--;
+                        g->deck.cards[g->deck.top] = g->discard.cards[j];
+                    }
+                }
+                g->deck.count = g->deck.top + g->discard.count;
+                g->discard.count = 0;
+                /* 洗牌 */
+                deck_shuffle(&g->deck);
+                /* 重洗后再摸一次 */
+                c = deck_draw(&g->deck);
+                if (!c) break;
+            } else {
+                break;  /* 牌堆和弃牌堆都空了 */
             }
-            break;
         }
         player_draw_card(p, c);
+        drawn++;
     }
-    game_log(g, "%s 摸了 %d 张牌", p->name, n);
+    game_log(g, "%s 摸了 %d 张牌", p->name, drawn);
 }
 
 
@@ -1073,6 +1091,14 @@ void game_next_phase(GameState* g)
             Player* hp = &g->players[i];
             if(hp->alive && hp->hero && hp->hero->on_any_turn_start)
                 hp->hero->on_any_turn_start(g, i, g->current_player);
+            /* 化形②：重置目标角色使用记录（每回合重置） */
+            if(hp->alive && hp->hero_id == HERO_YUDIE)
+            {
+                hp->yudie.huaxing_target_used_suits = 0;
+                for(int s = 0; s < 4; s++)
+                    hp->yudie.huaxing_target_used_names[s][0] = '\0';
+                hp->yudie.huaxing_response_used[g->current_player] = 0;
+            }
         }
         /* 如果触发了需要玩家选择的状态（如神圣护盾），停止推进阶段 */
         if(g->resp_state == RESPONSE_NEED_PALADIN_CHOICE ||
@@ -1183,6 +1209,14 @@ void game_next_phase(GameState* g)
         /* 武将技能：回合结束 */
         if(p->hero && p->hero->on_turn_end)
             p->hero->on_turn_end(g, g->current_player);
+        /* 化形②：检查所有雨蝶是否指定当前角色为目标 */
+        for(int i = 0; i < g->player_count; i++)
+        {
+            if(g->players[i].alive && g->players[i].hero_id == HERO_YUDIE)
+            {
+                yudie_huaxing_phase2_on_turn_end(g, i, g->current_player);
+            }
+        }
         /* 切换到下一个玩家 */
         g->current_player = (g->current_player + 1) % g->player_count;
         int tries = 0;
@@ -1270,6 +1304,26 @@ int game_use_card(GameState* g, int player_idx, int hand_index, int target_idx)
     if(result == 1 && card && p->hero && p->hero->on_card_used && !g->on_card_used_done)
         p->hero->on_card_used(g, player_idx, card);
     g->on_card_used_done = 0;  /* 重置标记 */
+
+    /* 化形②：记录目标角色使用过的牌（供雨蝶化形②使用） */
+    if(result == 1 && card)
+    {
+        for(int i = 0; i < g->player_count; i++)
+        {
+            if(g->players[i].alive && g->players[i].hero_id == HERO_YUDIE &&
+               g->players[i].yudie.chengdie && g->players[i].yudie.huaxing_target == player_idx)
+            {
+                Player* yd = &g->players[i];
+                if(card->suit >= 0 && card->suit < 4)
+                {
+                    yd->yudie.huaxing_target_used_suits |= (1 << card->suit);
+                    strncpy(yd->yudie.huaxing_target_used_names[card->suit],
+                            card_get_name(card), 31);
+                    yd->yudie.huaxing_target_used_names[card->suit][31] = '\0';
+                }
+            }
+        }
+    }
 
     return result;
 }
@@ -2138,11 +2192,16 @@ int game_ignore_armor(GameState* g, int attacker_idx, int target_idx)
 }
 
 
+/* 铁索连环传导标志：防止递归传导 */
+static int g_chaining = 0;
+
 void game_deal_damage(GameState* g, int target_idx, int amount, int source_idx, DamageType dmg_type)
 {
     if(target_idx <0 || target_idx >= g->player_count) return;
     Player* victim = &g->players[target_idx];
     if(!victim->alive || amount <=0) return;
+    /* 传导中的伤害不再触发新的传导（避免无限递归） */
+    int was_chaining = g_chaining;
 
     /* 记录当前伤害来源角色（反伤将用） */
     g->current_damage_source_player = source_idx;
@@ -2236,6 +2295,12 @@ void game_deal_damage(GameState* g, int target_idx, int amount, int source_idx, 
         }
     }
 
+    /* 确保hero指针正确（某些状态下可能为NULL） */
+    if(!victim->hero && victim->hero_id >= 0)
+    {
+        victim->hero = hero_get(victim->hero_id);
+    }
+
     /* 武将技能：受到伤害减免（琉璃等） */
     int damage_reduced = 0;
     if(victim->hero && victim->hero->damage_reduce)
@@ -2245,6 +2310,14 @@ void game_deal_damage(GameState* g, int target_idx, int amount, int source_idx, 
             amount -= damage_reduced;
             if(amount < 0) amount = 0;
         }
+    }
+    /* 后备：基于hero_id的减伤（hero指针异常时使用） */
+    else if(victim->hero_id == HERO_LINYUXIA && victim->shield > 0 && amount > 0)
+    {
+        damage_reduced = 1;
+        amount -= 1;
+        if(amount < 0) amount = 0;
+        game_log(g, "【琉璃·后备】%s有盾，伤害减1", victim->name);
     }
     /* 伤害减免后触发（琉璃摸牌等） */
     if(damage_reduced > 0 && victim->hero && victim->hero->on_damage_reduced)
@@ -2302,6 +2375,7 @@ void game_deal_damage(GameState* g, int target_idx, int amount, int source_idx, 
         }
 
         const char* chain_type_str = (dmg_type == DMG_FIRE) ? "火焰" : "雷电";
+        g_chaining = 1;  /* 标记传导开始 */
         for(int k = 0; k < chain_cnt; k++)
         {
             int chain_idx = chain_list[k];
@@ -2310,14 +2384,13 @@ void game_deal_damage(GameState* g, int target_idx, int amount, int source_idx, 
 
             cp->chained = 0;
 
-            game_log(g,"铁索连环传导：%s受到1点%s传导伤害", cp->name, chain_type_str);
-            cp->hp -= 1;
-            game_log(g,"%s 当前血量：%d", cp->name, cp->hp);
+            game_log(g,"铁索连环传导：%s受到%d点%s传导伤害", cp->name, amount, chain_type_str);
+            /* 递归调用game_deal_damage，触发藤甲+1、武将减伤、防具等完整结算 */
+            game_deal_damage(g, chain_idx, source_idx, amount, dmg_type);
 
-            game_dying_resolve(g, chain_idx, source_idx);
-
-            if(g->game_over) return;
+            if(g->game_over) break;
         }
+        g_chaining = was_chaining;  /* 恢复传导标志 */
     }
 }
 
@@ -5106,6 +5179,9 @@ int game_can_target(GameState* g, Card* card, int from_idx, int target_idx)
             max_sha = 999;
         else if(from->hero && from->hero->sha_bonus)
             max_sha += from->hero->sha_bonus(from);
+        /* 结束阶段打出的杀无次数限制（化形规则） */
+        if(g->phase == PHASE_END)
+            max_sha = 999;
         if(from->sha_used >= max_sha) return 0;
 
         return 1;

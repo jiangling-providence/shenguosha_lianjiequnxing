@@ -6,6 +6,9 @@
 #include "input.h"
 #include "audio.h"
 
+/* 训练模式标志：主程序为0，训练环境为1 */
+int g_training_mode = 0;
+
 int main(int argc, char* argv[])
 {
     (void)argc;
